@@ -29,7 +29,7 @@ def add_admin(admin_id: str) -> bool:
     """
     Add an admin to the config file
     """
-    config_path = "/workspace/config/admins.json"
+    config_path = "./config/admins.json"
     admins = load_admins(config_path)
     
     if admin_id not in admins:
@@ -43,7 +43,7 @@ def remove_admin(admin_id: str) -> bool:
     """
     Remove an admin from the config file
     """
-    config_path = "/workspace/config/admins.json"
+    config_path = "./config/admins.json"
     admins = load_admins(config_path)
     
     if admin_id in admins:
