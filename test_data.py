@@ -8,6 +8,16 @@ from db.models import Database
 def initialize_sample_data():
     db = Database()
     
+    # Check if products already exist to avoid duplicates
+    existing_products = db.get_all_products()
+    if existing_products:
+        print("Sample data already exists in the database.")
+        print(f"Found {len(existing_products)} products in the database.")
+        print("\nCurrent products in database:")
+        for product in existing_products:
+            print(f"- {product['name']}: ${product['price']}")
+        return
+    
     # Add some sample products
     sample_products = [
         {

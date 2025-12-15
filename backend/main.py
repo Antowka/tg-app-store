@@ -351,6 +351,7 @@ async def mini_app():
                             <div class="product-description">${product.description}</div>
                             <div class="product-price">$${product.price.toFixed(2)}</div>
                             <button class="buy-button" onclick="buyProduct(${product.id})">Buy Now</button>
+                            ${window.isAdmin ? `<button onclick="deleteProduct(${product.id})" style="background-color: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 1em; margin-top: 10px;">Delete</button>` : ''}
                         `;
                         
                         container.appendChild(card);
@@ -392,6 +393,34 @@ async def mini_app():
                 }
             }
             
+            // Function to delete a product (admin only)
+            async function deleteProduct(productId) {
+                if (!confirm('Are you sure you want to delete this product?')) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/products/${productId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        tg.showAlert('Product deleted successfully!');
+                        loadProducts(); // Refresh products list
+                    } else {
+                        tg.showAlert('Error deleting product: ' + (result.detail || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Error deleting product:', error);
+                    tg.showAlert('Error deleting product: ' + error.message);
+                }
+            }
+            
+            // Global variable to track admin status
+            let isAdmin = false;
+            
             // Function to check if user is admin
             async function checkAdmin() {
                 try {
@@ -405,6 +434,7 @@ async def mini_app():
                     const result = await response.json();
                     
                     if (result.is_admin) {
+                        isAdmin = true;
                         document.getElementById('admin-section').style.display = 'block';
                         loadOrders(); // Load orders for admin
                     }
