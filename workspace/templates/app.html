@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Shop Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .product-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: white;
+        }
+
+        .product-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .product-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 10px 0 5px 0;
+        }
+
+        .product-price {
+            color: #2e8b57;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .product-description {
+            margin: 10px 0;
+            color: #555;
+        }
+
+        .buy-button {
+            background-color: #2e8b57;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .buy-button:hover {
+            background-color: #256f4a;
+        }
+
+        .admin-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .admin-controls button {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .order-item {
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Telegram Shop</h1>
+
+    <div id="products-container">
+        <!-- Products will be loaded here -->
+    </div>
+
+    <div id="admin-section" class="admin-section" style="display: none;">
+        <h2>Admin Controls</h2>
+
+        <h3>Add New Product</h3>
+        <form id="add-product-form">
+            <input type="text" id="product-name" placeholder="Product Name" required><br><br>
+            <textarea id="product-description" placeholder="Description" required></textarea><br><br>
+            <input type="number" id="product-price" placeholder="Price" step="0.01" required><br><br>
+            <input type="text" id="product-image" placeholder="Image URL (optional)"><br><br>
+            <button type="submit">Add Product</button>
+        </form>
+
+        <h3>Orders</h3>
+        <div id="orders-container">
+            <!-- Orders will be loaded here -->
+        </div>
+    </div>
+</div>
+
+<script>
+    // Initialize Telegram WebApp
+    const tg = window.Telegram.WebApp;
+
+    // Expand the web app to full size
+    tg.expand();
+
+    // Enable closing confirmation
+    tg.enableClosingConfirmation();
+
+    // Function to load products
+    async function loadProducts() {
+        try {
+            const response = await fetch('products');
+            const products = await response.json();
+
+            const container = document.getElementById('products-container');
+            container.innerHTML = '';
+
+            products.forEach(product => {
+                const card = document.createElement('div');
+                card.className = 'product-card';
+
+                card.innerHTML = `
+                            <div class="product-title">${product.name}</div>
+                            ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}" class="product-image">` : ''}
+                            <div class="product-description">${product.description}</div>
+                            <div class="product-price">$${product.price.toFixed(2)}</div>
+                            <button class="buy-button" onclick="buyProduct(${product.id})">Buy Now</button>
+                        `;
+
+                container.appendChild(card);
+            });
+        } catch (error) {
+            console.error('Error loading products:', error);
+        }
+    }
+
+    // Function to handle buying a product
+    async function buyProduct(productId) {
+        // Get user info from Telegram WebApp
+        const user = tg.initDataUnsafe?.user || {id: 'unknown', username: 'unknown', first_name: 'Unknown'};
+
+        try {
+            const response = await fetch('orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    product_id: productId,
+                    user_id: user.id,
+                    user_username: user.username || '',
+                    user_full_name: `${user.first_name || ''} ${user.last_name || ''}`.trim()
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                tg.showAlert('Order placed successfully! Seller will contact you soon.');
+            } else {
+                tg.showAlert('Error placing order: ' + (result.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error placing order:', error);
+            tg.showAlert('Error placing order: ' + error.message);
+        }
+    }
+
+    // Function to check if user is admin
+    async function checkAdmin() {
+        try {
+            // In real implementation, we'd pass the user ID from Telegram
+            const userId = tg.initDataUnsafe?.user?.id || 'unknown';
+            const response = await fetch('user/check-admin', {
+                headers: {
+                    'X-User-ID': userId.toString()
+                }
+            });
+            const result = await response.json();
+
+            if (result.is_admin) {
+                document.getElementById('admin-section').style.display = 'block';
+                loadOrders(); // Load orders for admin
+            }
+        } catch (error) {
+            console.error('Error checking admin status:', error);
+        }
+    }
+
+    // Function to load orders (admin only)
+    async function loadOrders() {
+        try {
+            const response = await fetch('orders');
+            if (response.ok) {
+                const orders = await response.json();
+                const container = document.getElementById('orders-container');
+
+                container.innerHTML = '';
+
+                if (orders.length === 0) {
+                    container.innerHTML = '<p>No orders yet.</p>';
+                    return;
+                }
+
+                orders.forEach(order => {
+                    const orderElement = document.createElement('div');
+                    orderElement.className = 'order-item';
+
+                    orderElement.innerHTML = `
+                                <strong>Order #${order.id}</strong> - ${order.status}<br>
+                                Product: ${order.product_name}<br>
+                                User: ${order.user_full_name} (@${order.user_username})<br>
+                                User ID: ${order.user_id}<br>
+                                Date: ${new Date(order.created_at).toLocaleString()}<br>
+                                <button onclick="updateOrderStatus(${order.id}, 'completed')">Mark as Completed</button>
+                                <button onclick="updateOrderStatus(${order.id}, 'cancelled')">Cancel</button>
+                            `;
+
+                    container.appendChild(orderElement);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading orders:', error);
+        }
+    }
+
+    // Function to update order status (admin only)
+    async function updateOrderStatus(orderId, status) {
+        try {
+            const response = await fetch('orders/status', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    order_id: orderId,
+                    status: status
+                })
+            });
+
+            if (response.ok) {
+                tg.showAlert(`Order status updated to ${status}`);
+                loadOrders(); // Refresh orders list
+            } else {
+                tg.showAlert('Error updating order status');
+            }
+        } catch (error) {
+            console.error('Error updating order status:', error);
+            tg.showAlert('Error updating order status: ' + error.message);
+        }
+    }
+
+    // Handle form submission for adding a product
+    document.getElementById('add-product-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const name = document.getElementById('product-name').value;
+        const description = document.getElementById('product-description').value;
+        const price = parseFloat(document.getElementById('product-price').value);
+        const imageUrl = document.getElementById('product-image').value || null;
+
+        try {
+            const response = await fetch('products', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: name,
+                    description: description,
+                    price: price,
+                    image_url: imageUrl
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                tg.showAlert('Product added successfully!');
+                document.getElementById('add-product-form').reset();
+                loadProducts(); // Refresh products list
+            } else {
+                tg.showAlert('Error adding product: ' + (result.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error adding product:', error);
+            tg.showAlert('Error adding product: ' + error.message);
+        }
+    });
+
+    // Initial load
+    loadProducts();
+    checkAdmin();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  tg-app-store:
+    container_name: tg-app-store
+    build: .
+    ports:
+      - "8077:8000"  # например, для FastAPI/uvicorn
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python run_server.py  # замените на вашу точку входа
+    restart: unless-stopped

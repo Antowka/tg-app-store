@@ -2,7 +2,7 @@ import json
 import os
 from typing import List
 
-def load_admins(config_path: str = "/workspace/config/admins.json") -> List[str]:
+def load_admins(config_path: str = "./config/admins.json") -> List[str]:
     """
     Load the list of admin user IDs from the config file
     """
