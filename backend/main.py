@@ -1,8 +1,12 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import HTMLResponse
+import uuid
+
+from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Annotated
+from pathlib import Path
+import os
 import json
 import hashlib
 import hmac
@@ -18,8 +22,16 @@ app = FastAPI()
 # Подключаем папку с шаблонами
 templates = Jinja2Templates(directory="./workspace/templates")
 
+# Папка для сохранения изображений (создаётся, если не существует)
+UPLOAD_DIR = Path("./workspace/static")
+UPLOAD_DIR.mkdir(exist_ok=True)
+
 # Mount static files for templates
-app.mount("/static", StaticFiles(directory="./workspace/static"), name="static")
+app.mount("/static", StaticFiles(directory=UPLOAD_DIR), name="static")
+
+
+# Разрешённые MIME-типы или расширения (по желанию)
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # Initialize database
 db = Database()
@@ -76,19 +88,16 @@ def require_auth(request: Request):
     """
     Verify that the request comes from Telegram WebApp
     """
-    # In production, you would verify the initData here
-    # For now, we'll skip this for development purposes
-    # You should replace 'YOUR_BOT_TOKEN' with your actual bot token
-    # user_data = verify_telegram_webapp_data(
-    #     request.headers.get('X-Init-Data', ''), 
-    #     'YOUR_BOT_TOKEN'
-    # )
-    # if not user_data:
-    #     raise HTTPException(status_code=401, detail="Unauthorized")
-    # return user_data
+    user_data = verify_telegram_webapp_data(
+        request.headers.get('X-Init-Data', ''),
+        os.getenv("TG_TOKEN")
+    )
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return user_data
     
     # For development purposes, return a mock user
-    return {"id": "123456789", "username": "test_user"}
+    # return {"id": "123456789", "username": "test_user"}
 
 def require_admin(user_data: dict = Depends(require_auth)):
     """
@@ -102,6 +111,7 @@ def require_admin(user_data: dict = Depends(require_auth)):
 async def root():
     return {"message": "Telegram Mini Shop API"}
 
+
 @app.get("/products", response_model=List[dict])
 async def get_products():
     """
@@ -110,17 +120,46 @@ async def get_products():
     products = db.get_all_products()
     return products
 
+def get_extension(filename: str) -> str:
+    return Path(filename).suffix.lower()
+
 @app.post("/products", dependencies=[Depends(require_admin)])
-async def create_product(product: ProductCreate, user_data: dict = Depends(require_auth)):
+async def create_product(name: Annotated[str, Form()],          # ← 'name'
+                         description: Annotated[str, Form()],   # ← 'description'
+                         price: Annotated[float, Form()],       # ← 'price'
+                         file: Annotated[UploadFile, File()] = None,  # ← 'file'
+                         user_data: dict = Depends(require_auth)):
+    # Валидация расширения
+    ext = get_extension(file.filename)
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недопустимый тип файла. Разрешены: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+
+    # Генерация имени
+    new_filename = f"{uuid.uuid4()}{ext}"
+    file_path = UPLOAD_DIR / new_filename
+
+    # Чтение и сохранение файла
+    try:
+        contents = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(contents)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка записи файла: {str(e)}")
+
+
     """
     Create a new product (admin only)
     """
     product_id = db.add_product(
-        name=product.name,
-        description=product.description,
-        price=product.price,
-        image_url=product.image_url
+        name=name,
+        description=description,
+        price=price,
+        image_url="static/" + new_filename
     )
+
     return {"id": product_id, "message": "Product created successfully"}
 
 @app.put("/products/{product_id}", dependencies=[Depends(require_admin)])

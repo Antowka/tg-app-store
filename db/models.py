@@ -153,6 +153,7 @@ class Database:
                    o.user_full_name, o.status, o.created_at
             FROM orders o
             JOIN products p ON o.product_id = p.id
+            WHERE o.status <> 'hide' 
             ORDER BY o.created_at DESC
         ''')
         rows = cursor.fetchall()

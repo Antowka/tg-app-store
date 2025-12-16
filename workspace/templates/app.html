@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,7 +33,7 @@
         .product-image {
             width: 100%;
             height: 200px;
-            object-fit: cover;
+            object-fit: contain;
             border-radius: 5px;
         }
 
@@ -89,25 +89,25 @@
 </head>
 <body>
 <div class="container">
-    <h1>Telegram Shop</h1>
+    <h1>Магазинчик</h1>
 
     <div id="products-container">
         <!-- Products will be loaded here -->
     </div>
 
     <div id="admin-section" class="admin-section" style="display: none;">
-        <h2>Admin Controls</h2>
+        <h2>Админка (Стол заказов)</h2>
 
-        <h3>Add New Product</h3>
+        <h3>Добавление нового товара</h3>
         <form id="add-product-form">
-            <input type="text" id="product-name" placeholder="Product Name" required><br><br>
-            <textarea id="product-description" placeholder="Description" required></textarea><br><br>
-            <input type="number" id="product-price" placeholder="Price" step="0.01" required><br><br>
-            <input type="text" id="product-image" placeholder="Image URL (optional)"><br><br>
-            <button type="submit">Add Product</button>
+            <input type="text" id="product-name" placeholder="Наименование" required><br><br>
+            <textarea id="product-description" placeholder="Описание" required></textarea><br><br>
+            <input type="number" id="product-price" placeholder="Цена" step="0.01" required><br><br>
+            <input type="file" name="file" id="product-image-file" placeholder="Изображение товара" accept="image/*" required><br><br>
+            <button type="submit">Добавить товар</button>
         </form>
 
-        <h3>Orders</h3>
+        <h3>Заказы</h3>
         <div id="orders-container">
             <!-- Orders will be loaded here -->
         </div>
@@ -127,8 +127,6 @@
 
     let isAdmin = false;
 
-    const initData = tg.initData;
-
     // Function to load products
     async function loadProducts() {
         try {
@@ -146,9 +144,9 @@
                             <div class="product-title">${product.name}</div>
                             ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}" class="product-image">` : ''}
                             <div class="product-description">${product.description}</div>
-                            <div class="product-price">$${product.price.toFixed(2)}</div>
-                            <button class="buy-button" onclick="buyProduct(${product.id})">Buy Now</button>
-                            ${isAdmin ? `<button onclick="deleteProduct(${product.id})" style="background-color: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 1em; margin-top: 10px;">Delete</button>` : ''}
+                            <div class="product-price">${product.price} ₽</div>
+                            <button class="buy-button" onclick="buyProduct(${product.id})">Заказать</button>
+                            ${isAdmin ? `<button onclick="deleteProduct(${product.id})" style="background-color: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 1em; margin-top: 10px;">Удалить</button>` : ''}
                         `;
 
                 container.appendChild(card);
@@ -161,14 +159,15 @@
     // Function to handle buying a product
     async function buyProduct(productId) {
         // Get user info from Telegram WebApp
-        const user = tg.initData?.user || {id: 'unknown', username: 'unknown', first_name: 'Unknown'};
+        const user = tg.initDataUnsafe?.user || { id: 'unknown', username: 'unknown', first_name: 'Unknown' };
 
         try {
             const response = await fetch('orders', {
                 method: 'POST',
                 headers: {
+                    'X-User-ID': user.id.toString(),
                     'Content-Type': 'application/json',
-                    'X-Init-Data': initData
+                    'X-Init-Data': tg.initData
                 },
                 body: JSON.stringify({
                     product_id: productId,
@@ -181,9 +180,9 @@
             const result = await response.json();
 
             if (response.ok) {
-                tg.showAlert('Order placed successfully! Seller will contact you soon.');
+                tg.showAlert('Заявка отправлена! Продавец скоро свяжется с Вами.');
             } else {
-                tg.showAlert('Error placing order: ' + (result.detail || 'Unknown error'));
+                tg.showAlert('Ошибка заказа: ' + (result.detail || 'Unknown error'));
             }
         } catch (error) {
             console.error('Error placing order:', error);
@@ -193,7 +192,7 @@
 
     // Function to delete a product (admin only)
     async function deleteProduct(productId) {
-        if (!confirm('Are you sure you want to delete this product?')) {
+        if (!confirm('Точно удаляем товар?')) {
             return;
         }
 
@@ -201,21 +200,21 @@
             const response = await fetch(`products/${productId}`, {
                 method: 'DELETE',
                 headers: {
-                    'X-Init-Data': initData
+                    'X-Init-Data': tg.initData
                 }
             });
 
             const result = await response.json();
 
             if (response.ok) {
-                tg.showAlert('Product deleted successfully!');
+                tg.showAlert('Товар успешно удалён!');
                 loadProducts(); // Refresh products list
             } else {
-                tg.showAlert('Error deleting product: ' + (result.detail || 'Unknown error'));
+                tg.showAlert('Ошибка удаления товара: ' + (result.detail || 'Unknown error'));
             }
         } catch (error) {
             console.error('Error deleting product:', error);
-            tg.showAlert('Error deleting product: ' + error.message);
+            tg.showAlert('Ошибка удаления товара: ' + error.message);
         }
     }
 
@@ -227,7 +226,7 @@
             const response = await fetch('user/check-admin', {
                 headers: {
                     'X-User-ID': userId.toString(),
-                    'X-Init-Data': initData
+                    'X-Init-Data': tg.initData
                 }
             });
             const result = await response.json();
@@ -245,7 +244,11 @@
     // Function to load orders (admin only)
     async function loadOrders() {
         try {
-            const response = await fetch('orders');
+            const response = await fetch('orders', {
+                headers: {
+                    'X-Init-Data': tg.initData
+                }
+            });
             if (response.ok) {
                 const orders = await response.json();
                 const container = document.getElementById('orders-container');
@@ -253,7 +256,7 @@
                 container.innerHTML = '';
 
                 if (orders.length === 0) {
-                    container.innerHTML = '<p>No orders yet.</p>';
+                    container.innerHTML = '<p>Нет заказов</p>';
                     return;
                 }
 
@@ -262,20 +265,20 @@
                     orderElement.className = 'order-item';
 
                     orderElement.innerHTML = `
-                                <strong>Order #${order.id}</strong> - ${order.status}<br>
-                                Product: ${order.product_name}<br>
-                                User: ${order.user_full_name} (@${order.user_username})<br>
-                                User ID: ${order.user_id}<br>
-                                Date: ${new Date(order.created_at).toLocaleString()}<br>
-                                <button onclick="updateOrderStatus(${order.id}, 'completed')">Mark as Completed</button>
-                                <button onclick="updateOrderStatus(${order.id}, 'cancelled')">Cancel</button>
+                                <strong>Заказ №${order.id}</strong> - ${order.status}<br>
+                                Товар: ${order.product_name}<br>
+                                Пользователь: ${order.user_full_name} (@${order.user_username})<br>
+                                Дата: ${new Date(order.created_at).toLocaleString()}<br>
+                                <button onclick="updateOrderStatus(${order.id}, 'completed')">Завершить</button>
+                                <button onclick="updateOrderStatus(${order.id}, 'cancelled')">Отмена</button>
+                                <button onclick="updateOrderStatus(${order.id}, 'hide')">Скрыть</button>
                             `;
 
                     container.appendChild(orderElement);
                 });
             }
         } catch (error) {
-            console.error('Error loading orders:', error);
+            console.error('Ошибка загрузки заказов:', error);
         }
     }
 
@@ -286,7 +289,7 @@
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Init-Data': initData
+                    'X-Init-Data': tg.initData
                 },
                 body: JSON.stringify({
                     order_id: orderId,
@@ -295,55 +298,73 @@
             });
 
             if (response.ok) {
-                tg.showAlert(`Order status updated to ${status}`);
+                tg.showAlert(`Статус заказа обновлён ${status}`);
                 loadOrders(); // Refresh orders list
             } else {
-                tg.showAlert('Error updating order status');
+                tg.showAlert('Ошибка обновления статуса заказа');
             }
         } catch (error) {
             console.error('Error updating order status:', error);
-            tg.showAlert('Error updating order status: ' + error.message);
+            tg.showAlert('Ошибка обновления статуса заказа: ' + error.message);
         }
     }
 
     // Handle form submission for adding a product
     document.getElementById('add-product-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
+    e.preventDefault();
 
-        const name = document.getElementById('product-name').value;
-        const description = document.getElementById('product-description').value;
-        const price = parseFloat(document.getElementById('product-price').value);
-        const imageUrl = document.getElementById('product-image').value || null;
+    const name = document.getElementById('product-name').value.trim();
+    const description = document.getElementById('product-description').value.trim();
+    const price = parseFloat(document.getElementById('product-price').value);
+    const fileInput = document.getElementById('product-image-file');
+    const file = fileInput.files[0]; // выбранное изображение, если есть
 
-        try {
-            const response = await fetch('products', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Init-Data': initData
-                },
-                body: JSON.stringify({
-                    name: name,
-                    description: description,
-                    price: price,
-                    image_url: imageUrl
-                })
-            });
+    // Валидация
+    if (!name || isNaN(price) || price <= 0) {
+        tg.showAlert('Please fill in all fields correctly.');
+        return;
+    }
 
-            const result = await response.json();
+    // Создаём FormData — автоматически кодирует как multipart/form-data
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('description', description);
+    formData.append('price', price);
 
-            if (response.ok) {
-                tg.showAlert('Product added successfully!');
-                document.getElementById('add-product-form').reset();
-                loadProducts(); // Refresh products list
-            } else {
-                tg.showAlert('Error adding product: ' + (result.detail || 'Unknown error'));
-            }
-        } catch (error) {
-            console.error('Error adding product:', error);
-            tg.showAlert('Error adding product: ' + error.message);
+    if (file) {
+        // Добавляем файл под именем 'file' — как в FastAPI: file: UploadFile
+        formData.append('file', file);
+    } else {
+        // Опционально: можно разрешить внешний URL (но тогда backend должен обрабатывать оба варианта)
+        // formData.append('image_url', imageUrl);
+    }
+
+    try {
+        const response = await fetch('products', {
+            method: 'POST',
+            headers: {
+                // ⚠️ НЕ указываем 'Content-Type' — браузер сам поставит multipart с boundary!
+                'X-Init-Data': tg.initData
+            },
+            body: formData  // ← передаём FormData, а не JSON
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            tg.showAlert('Product added successfully!');
+            document.getElementById('add-product-form').reset();
+            // Сброс файла вручную (reset() не всегда сбрасывает input[type=file])
+            fileInput.value = '';
+            loadProducts(); // обновить список
+        } else {
+            tg.showAlert('Error: ' + (result.detail || 'Unknown error'));
         }
-    });
+    } catch (error) {
+        console.error('Network or parsing error:', error);
+        tg.showAlert('Error: ' + (error.message || 'Failed to send request'));
+    }
+});
 
     // Initial load
     checkAdmin();

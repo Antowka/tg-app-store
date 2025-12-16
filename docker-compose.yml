@@ -8,6 +8,7 @@ services:
       - "8077:8000"  # например, для FastAPI/uvicorn
     environment:
       - PYTHONUNBUFFERED=1
+      - TG_TOKEN=54646545:ABCbkT3y11JtGKj53Ab2c_9Hg7GcXbhq178
     volumes:
       - .:/app
     working_dir: /app
